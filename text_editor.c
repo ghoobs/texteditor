@@ -20,6 +20,7 @@
 #define TAB_STOP 8
 
 enum editorKey {
+  BACKSPACE = 127,
   ARROW_LEFT = 1000,
   ARROW_RIGHT,
   ARROW_UP,
@@ -231,7 +232,47 @@ void editorAppendRow(char *s, size_t len){
   E.numrows++;
 }
 
+void editorRowInsertChar(erow *row, int at, int c){
+  if (at < 0 || at > row->size) at = row->size;
+
+  row->chars = realloc(row->chars, row->size + 2);
+  memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1);
+  row->size++;
+  row->chars[at] = c;
+  editorUpdateRow(row);
+}
+
+//*** editor operations ***/
+
+void editorInsertChar(int c){
+  if(E.cy == E.numrows) {
+    editorAppendRow("", 0);
+  }
+  editorRowInsertChar(&E.row[E.cy], E.cx, c);
+  E.cx++;
+}
+
 //*** file i/o ***//
+
+char *editorRowsToString(int* buflen){
+  int totlen = 0;
+  int j;
+  for (j = 0; j < E.numrows; j++) {
+    totlen += E.row[j].size + 1;
+  }
+  *buflen = totlen;
+
+  char *buf = malloc(totlen);
+  char *p = buf;
+  for (j = 0; j < E.numrows; j++) {
+    memcpy(p, E.row[j].chars, E.row[j].size);
+    p += E.row[j].size;
+    *p = '\n';
+    p++;
+  }
+
+  return buf;
+}
 
 void editorOpen(char *filename) {
   free(E.filename);
@@ -425,6 +466,9 @@ void editorProcessKeypress(){
   int c = editorReadKey();
 
   switch(c) {
+    case '\r':
+      break;
+    
     case CTRL_KEY('q'):
       write(STDERR_FILENO, "\x1b[2J", 4);
       write(STDOUT_FILENO, "\x1b[H", 3);
@@ -457,6 +501,21 @@ void editorProcessKeypress(){
       int times = E.screenrows;
       while (times--) editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
     }
+      break;
+    
+    case BACKSPACE:
+    case CTRL_KEY('h'):
+    case DEL_KEY:
+      break;
+
+    case CTRL_KEY('l'):
+    case '\x1b':
+      break;
+    
+
+    default:
+      editorInsertChar(c);
+      break;
   }
 }
 
