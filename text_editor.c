@@ -41,6 +41,7 @@ typedef struct erow {
   int rsize;
   char *chars;
   char *render;
+  int indent;
 } erow;
 
 struct editorConfig {
@@ -67,6 +68,28 @@ struct editorConfig E;
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
 char *editorPrompt(char *prompt);
+
+//*** append buffer ***//
+
+struct abuf {
+  char *b;
+  int len;
+};
+
+#define ABUF_INIT {NULL, 0}
+
+void abAppend(struct abuf *ab, const char *s, int len){
+  char *new = realloc(ab->b, ab->len + len);
+
+  if (new == NULL) return;
+  memcpy(&new[ab->len], s, len);
+  ab->b = new;
+  ab->len += len;
+}
+
+void abFree(struct abuf *ab){
+  free(ab->b);
+}
 
 //*** terminal ***//
 
@@ -206,6 +229,7 @@ void editorUpdateRow(erow *row) {
   for (j = 0; j < row->size; j++) {
     if (row->chars[j] == '\t') tabs++;
   }
+  row->indent = tabs;
 
   free(row->render);
   row->render = malloc(row->size + tabs*(TAB_STOP - 1)+ 1);
@@ -238,6 +262,7 @@ void editorInsertRow(int at, char *s, size_t len){
 
   E.row[at].rsize = 0;
   E.row[at].render = NULL;
+  E.row[at].indent = 0;
   editorUpdateRow(&E.row[at]);
 
   E.numrows++;
@@ -301,14 +326,21 @@ void editorInsertNewline(){
   if(E.cx == 0) editorInsertRow(E.cy, "", 0);
   else {
     erow *row = &E.row[E.cy];
-    editorInsertRow(E.cy + 1, &row->chars[E.cx], row->size - E.cx);
+    struct abuf ab = ABUF_INIT;
+
+    int tabs = 0;
+    for (int j = 0; j < E.cx; j++) if (row->chars[j] == '\t') abAppend(&ab, "\t", 1);
+    abAppend(&ab, &row->chars[E.cx], row->size - E.cx);
+    editorInsertRow(E.cy + 1, ab.b, row->size + row->indent - E.cx);
+
     row = &E.row[E.cy];     // to be safe since editorInsertRow calls realloc that might invalidate the pointer
     row->size = E.cx;
     row->chars[row->size] = '\0';
     editorUpdateRow(row);
   }
   E.cy++;
-  E.cx = 0;
+  E.cx = E.row[E.cy].indent;
+  editorUpdateRow(&E.row[E.cy]);
 }
 
 void editorDelChar(){
@@ -399,28 +431,6 @@ void editorSave() {
 
   free(buf);
   editorSetStatusMessage("Couldn't save! error: %s", strerror(errno));
-}
-
-//*** append buffer ***//
-
-struct abuf {
-  char *b;
-  int len;
-};
-
-#define ABUF_INIT {NULL, 0}
-
-void abAppend(struct abuf *ab, const char *s, int len){
-  char *new = realloc(ab->b, ab->len + len);
-
-  if (new == NULL) return;
-  memcpy(&new[ab->len], s, len);
-  ab->b = new;
-  ab->len += len;
-}
-
-void abFree(struct abuf *ab){
-  free(ab->b);
 }
 
 //*** output ***//
